@@ -1,12 +1,22 @@
 {
-  "background_color": "#ffffff",
-  "dir": "ltr",
-  "display": "fullscreen",
-  "name": "jumping jack 40-levels",
-  "orientation": "portrait",
-  "scope": "/",
+  "name": "Jumping Jack - 40 Levels",
   "short_name": "JumpingJack",
-  "start_url": "/index.html",
-  "theme_color": "#ffffff",
-  "description": "Fun jumping game with 40 challenging levels"
+  "description": "Fun jumping game with 40 challenging levels",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "background_color": "#000428",
+  "theme_color": "#00d9ff",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512", 
+      "type": "image/png"
+    }
+  ]
 }
