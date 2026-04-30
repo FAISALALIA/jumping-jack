@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Jumping Jack - 40 Levels</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-user-select:none}
+    body{background:#000428;font-family:Arial;color:white;overflow:hidden;touch-action:none}
+ .screen{position:absolute;width:100vw;height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center}
+ .hidden{display:none!important}
+ .game-title{font-size:50px;color:#00d9ff;margin-bottom:10px;text-shadow:0 0 20px #00d9ff}
+ .subtitle{font-size:16px;color:#888;margin-bottom:30px}
+ .btn{width:250px;padding:20px;margin:10px;font-size:24px;background:linear-gradient(45deg,#00d9ff,#0099cc);border:none;border-radius:10px;color:white;cursor:pointer;font-weight:bold;box-shadow:0 5px 15px rgba(0,217,255,0.4)}
+ .btn:active{transform:scale(0.95)}
+ .levels-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;padding:80px 20px 20px;max-width:400px;margin:0 auto;overflow-y:auto;max-height:70vh}
+  .level-box{width:65px;height:65px;background:#1a1a2e;border:3px solid #00d9ff;border-radius:10px;display:flex;flex-direction:column;justify-content:center;align-items:center;cursor:pointer;flex-shrink:0}
+ .level-box.locked{background:#333;border-color:#555;cursor:not-allowed}
+ .level-box.locked::after{content:'🔒';font-size:30px}
+ .level-num{font-size:24px;font-weight:bold}
+ .level-stars{font-size:10px;color:gold}
+    #backBtn{position:absolute;top:20px;left:20px;padding:10px 20px;background:#333;border:none;color:white;border-radius:5px;cursor:pointer;z-index:20}
+    #gameCanvas{position:absolute;top:0;left:0}
+    #menuBtnGame{position:absolute;top:20px;right:20px;padding:10px 20px;background:#2196F3;border:none;color:white;border-radius:5px;cursor:pointer;font-size:18px;z-index:20}
+ .total-stars{margin-top:20px;font-size:24px}
+  </style>
+</head>
+<body>
+  <div id="mainMenu" class="screen">
+    <h1 class="game-title">JUMPING JACK</h1>
+    <p class="subtitle">40 Levels of Madness</p>
+    <button class="btn" onclick="showLevels()">LEVELS</button>
+    <button class="btn" onclick="startLevel(getUnlockedLevel())">QUICK PLAY</button>
+    <div class="total-stars">⭐ <span id="totalStars">0</span>/120</div>
+   <div style="margin-top:15px;font-size:18px;font-weight:bold;color:#00d9ff;text-shadow:0 0 10px #00d9ff;letter-spacing:2px">FAGames</div>
+  </div>
+
+  <div id="levelSelect" class="screen hidden">
+    <button id="backBtn" onclick="showMenu()">← BACK</button>
+    <h2 style="margin-bottom:20px">SELECT LEVEL 1-40</h2>
+    <div id="levelsGrid" class="levels-grid"></div>
+  </div>
+
+  <div id="gameScreen" class="screen hidden">
+    <canvas id="gameCanvas"></canvas>
+    <button id="menuBtnGame" onclick="showMenu()">MENU</button>
+  </div>
+
+  <div id="gameOverScreen" class="screen hidden">
+    <h1 style="color:#ff0000; font-size:50px; margin-bottom:20px;">GAME OVER</h1>
+    <p style="font-size:28px; margin:10px;">Score: <span id="finalScore">0</span></p>
+    <p style="font-size:20px; color:#00d9ff; margin-bottom:30px;">Level: <span id="finalLevel">1</span></p>
+    
+    <button onclick="watchAdForRevive()" style="width:280px; padding:20px; margin:10px; font-size:22px; background:linear-gradient(45deg,#ff00ff,#ff6600); border:none; border-radius:15px; color:white; font-weight:bold; cursor:pointer;">
+        📺 WATCH AD TO REVIVE
+    </button>
+    
+    <button onclick="showMenu()" style="width:280px; padding:18px; margin:10px; font-size:20px; background:#333; border:2px solid #666; border-radius:15px; color:white; cursor:pointer;">
+        🏠 BACK TO MENU
+    </button>
+</div>
+
+  <script>
+    let gameData = JSON.parse(localStorage.getItem('jj_gameData')) || {unlockedLevel: 1, levelStars: {}, totalStars: 0};
+    let gameRunning = false;
+    let player, platforms, powerups, coins, enemies, score, currentLevelNum, stars, levelConfig;
+    let canvas, ctx, animationId;
+
+    // LEVEL CONFIG - 40 LEVELS KA DATA
+    const LEVEL_DATA = {
+      1: {gap: 80, width: 120, moving: 0, breakable: 0, enemy: 0, theme: 'Earth'},
+      2: {gap: 90, width: 110, moving: 0.1, breakable: 0, enemy: 0, theme: 'Earth'},
+      3: {gap: 95, width: 100, moving: 0.3, breakable: 0, enemy: 0, theme: 'Earth'},
+      4: {gap: 100, width: 100, moving: 0.3, breakable: 0.2, enemy: 0, theme: 'Earth'},
+      5: {gap: 100, width: 100, moving: 0.4, breakable: 0.2, enemy: 0, theme: 'Earth'},
+      // 6-10: SKY ZONE
+      6: {gap: 105, width: 95, moving: 0.4, breakable: 0.3, enemy: 0, theme: 'Sky'},
+      7: {gap: 110, width: 90, moving: 0.5, breakable: 0.3, enemy: 0.1, theme: 'Sky'},
+      8: {gap: 110, width: 90, moving: 0.5, breakable: 0.4, enemy: 0.1, theme: 'Sky'},
+      9: {gap: 115, width: 85, moving: 0.6, breakable: 0.4, enemy: 0.15, theme: 'Sky'},
+      10: {gap: 120, width: 85, moving: 0.6, breakable: 0.5, enemy: 0.2, theme: 'Sky'},
+      // 11-15: SPACE ZONE
+      11: {gap: 120, width: 85, moving: 0.6, breakable: 0.5, enemy: 0.2, gravity: 0.6, theme: 'Space'},
+      12: {gap: 125, width: 80, moving: 0.7, breakable: 0.5, enemy: 0.25, gravity: 0.6, theme: 'Space'},
+      13: {gap: 125, width: 80, moving: 0.7, breakable: 0.6, enemy: 0.25, gravity: 0.6, theme: 'Space'},
+      14: {gap: 130, width: 75, moving: 0.7, breakable: 0.6, enemy: 0.3, gravity: 0.6, theme: 'Space'},
+      15: {gap: 130, width: 75, moving: 0.8, breakable: 0.6, enemy: 0.3, gravity: 0.6, theme: 'Space'},
+      // 16-20: LAVA ZONE
+      16: {gap: 135, width: 75, moving: 0.8, breakable: 0.7, enemy: 0.3, lava: true, theme: 'Lava'},
+      17: {gap: 135, width: 70, moving: 0.8, breakable: 0.7, enemy: 0.35, lava: true, theme: 'Lava'},
+      18: {gap: 140, width: 70, moving: 0.8, breakable: 0.7, enemy: 0.35, lava: true, theme: 'Lava'},
+      19: {gap: 140, width: 70, moving: 0.9, breakable: 0.8, enemy: 0.4, lava: true, theme: 'Lava'},
+      20: {gap: 145, width: 65, moving: 0.9, breakable: 0.8, enemy: 0.4, lava: true, theme: 'Lava'},
+      // 21-25: ICE ZONE - Slippery
+      21: {gap: 140, width: 70, moving: 0.8, breakable: 0.7, enemy: 0.35, ice: true, theme: 'Ice'},
+      22: {gap: 145, width: 65, moving: 0.8, breakable: 0.7, enemy: 0.4, ice: true, theme: 'Ice'},
+      23: {gap: 145, width: 65, moving: 0.9, breakable: 0.8, enemy: 0.4, ice: true, theme: 'Ice'},
+      24: {gap: 150, width: 60, moving: 0.9, breakable: 0.8, enemy: 0.45, ice: true, theme: 'Ice'},
+      25: {gap: 150, width: 60, moving: 0.9, breakable: 0.9, enemy: 0.45, ice: true, theme: 'Ice'},
+      // 26-30: VOID ZONE - Dark
+      26: {gap: 155, width: 60, moving: 0.9, breakable: 0.8, enemy: 0.45, dark: true, theme: 'Void'},
+      27: {gap: 155, width: 60, moving: 0.9, breakable: 0.9, enemy: 0.5, dark: true, theme: 'Void'},
+      28: {gap: 160, width: 55, moving: 1.0, breakable: 0.9, enemy: 0.5, dark: true, theme: 'Void'},
+      29: {gap: 160, width: 55, moving: 1.0, breakable: 0.9, enemy: 0.55, dark: true, theme: 'Void'},
+      30: {gap: 165, width: 55, moving: 1.0, breakable: 1.0, enemy: 0.55, dark: true, theme: 'Void'},
+      // 31-35: HELL ZONE
+      31: {gap: 165, width: 55, moving: 1.0, breakable: 0.9, enemy: 0.6, lava: true, dark: true, theme: 'Hell'},
+      32: {gap: 170, width: 50, moving: 1.0, breakable: 1.0, enemy: 0.6, lava: true, dark: true, theme: 'Hell'},
+      33: {gap: 170, width: 50, moving: 1.0, breakable: 1.0, enemy: 0.65, lava: true, dark: true, theme: 'Hell'},
+      34: {gap: 175, width: 50, moving: 1.0, breakable: 1.0, enemy: 0.65, lava: true, dark: true, theme: 'Hell'},
+      35: {gap: 175, width: 45, moving: 1.0, breakable: 1.0, enemy: 0.7, lava: true, dark: true, theme: 'Hell'},
+      // 36-40: FINAL BOSS ZONE
+      36: {gap: 180, width: 45, moving: 1.0, breakable: 1.0, enemy: 0.7, gravity: 1.0, theme: 'Boss'},
+      37: {gap: 180, width: 45, moving: 1.0, breakable: 1.0, enemy: 0.75, gravity: 1.0, theme: 'Boss'},
+      38: {gap: 185, width: 40, moving: 1.0, breakable: 1.0, enemy: 0.75, gravity: 1.0, theme: 'Boss'},
+      39: {gap: 185, width: 40, moving: 1.0, breakable: 1.0, enemy: 0.8, gravity: 1.0, theme: 'Boss'},
+      40: {gap: 190, width: 40, moving: 1.0, breakable: 1.0, enemy: 0.8, gravity: 1.0, lava: true, dark: true, theme: 'Final'}
+    };
+
+    // SOUND
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContext();
+    function playSound(freq, duration, type='sine') {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.frequency.value = freq; osc.type = type;
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+      osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + duration);
+    }
+    const sounds = {
+      jump: () => playSound(400, 0.1, 'square'),
+      coin: () => playSound(800, 0.1, 'sine'),
+      powerup: () => playSound(600, 0.2, 'sawtooth'),
+      die: () => playSound(200, 0.3, 'sawtooth'),
+      win: () => { playSound(523,0.1); setTimeout(()=>playSound(659,0.1),100); setTimeout(()=>playSound(784,0.2),200); }
+    };
+
+    canvas = document.getElementById('gameCanvas');
+    ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function getUnlockedLevel() { return gameData.unlockedLevel; }
+    function saveGame() { localStorage.setItem('jj_gameData', JSON.stringify(gameData)); }
+
+    function showMenu() {
+      gameRunning = false;
+      cancelAnimationFrame(animationId);
+      document.getElementById('mainMenu').classList.remove('hidden');
+      document.getElementById('levelSelect').classList.add('hidden');
+      document.getElementById('gameScreen').classList.add('hidden');
+      document.getElementById('gameOverScreen').classList.add('hidden');
+      document.getElementById('totalStars').innerText = gameData.totalStars;
+    }
+
+    function showLevels() {
+      document.getElementById('mainMenu').classList.add('hidden');
+      document.getElementById('levelSelect').classList.remove('hidden');
+      document.getElementById('gameScreen').classList.add('hidden');
+      const grid = document.getElementById('levelsGrid');
+      grid.innerHTML = '';
+      for(let i = 1; i <= 40; i++) {
+        const box = document.createElement('div');
+        box.className = 'level-box';
+        if(i > gameData.unlockedLevel) {
+          box.classList.add('locked');
+        } else {
+          const starCount = gameData.levelStars[i] || 0;
+          box.innerHTML = `<div class="level-num">${i}</div><div class="level-stars">${'⭐'.repeat(starCount)}</div>`;
+          box.onclick = function() { startLevel(i); };
+        }
+        grid.appendChild(box);
+      }
+    }
+    function startLevel(num) {
+      currentLevelNum = num;
+      levelConfig = LEVEL_DATA[num];
+      document.getElementById('mainMenu').classList.add('hidden');
+      document.getElementById('levelSelect').classList.add('hidden');
+      document.getElementById('gameScreen').classList.remove('hidden');
+
+      player = {
+        x: canvas.width/2-20, y: canvas.height-150, w:40, h:40,
+        vy:0, jump:-16, gravity: levelConfig.gravity || 0.8, jetpack:0
+      };
+      platforms = []; powerups = []; coins = []; enemies = []; stars = []; score = 0;
+
+      // Stars
+      for(let i=0;i<100;i++){
+        stars.push({x:Math.random()*canvas.width, y:Math.random()*canvas.height, size:Math.random()*2});
+      }
+
+      platforms.push({ x: canvas.width/2-60, y: canvas.height-80, w: 120, h: 20, type: 'safe' });
+      let lastY = canvas.height - 200;
+
+      for(let i = 0; i < 15; i++) {
+        let pType = 'normal';
+        let rand = Math.random();
+        if(rand < levelConfig.moving) pType = 'moving';
+        else if(rand < levelConfig.moving + levelConfig.breakable) pType = 'breakable';
+
+        platforms.push({
+          x: Math.random() * (canvas.width-levelConfig.width-20) + 10, y: lastY,
+          w: levelConfig.width, h: 20, type: pType,
+          vx: pType === 'moving'? (Math.random() > 0.5? 2 + num*0.1 : -2 - num*0.1) : 0,
+          health: pType === 'breakable'? 1 : 999
+        });
+        lastY -= levelConfig.gap + Math.random()*20;
+
+        if(Math.random() > 0.7) powerups.push({x: platforms[platforms.length-1].x+40, y: lastY-30, type: Math.random()>0.5?'spring':'jetpack', w:30,h:30});
+        if(Math.random() > 0.6) coins.push({x: platforms[platforms.length-1].x+50, y: lastY-20, w:20,h:20, collected:false});
+        if(Math.random() < levelConfig.enemy) enemies.push({x: platforms[platforms.length-1].x+30, y: lastY-40, w:30,h:30, vx: Math.random()>0.5?1:-1});
+      }
+      gameRunning = true;
+      gameLoop();
+    }
+
+    function gameLoop() {
+      if(!gameRunning) return;
+
+      if(player.jetpack > 0) {
+        player.vy = -12; player.jetpack--;
+      } else {
+        player.vy += player.gravity;
+      }
+      player.y += player.vy;
+
+      // Platform collision
+      platforms.forEach(p => {
+        if(p.type === 'moving') {
+          p.x += p.vx;
+          if(p.x <= 0 || p.x+p.w >= canvas.width) p.vx *= -1;
+        }
+        if(player.x+15 < p.x+p.w && player.x+player.w-15 > p.x &&
+           player.y+player.h > p.y && player.y+player.h < p.y+p.h+15 && player.vy > 0) {
+          if(p.type === 'breakable') {
+            p.health--;
+            if(p.health <= 0) p.y = canvas.height + 100;
+          }
+          player.vy = player.jump;
+          sounds.jump();
+        }
+      });
+
+      // Enemy collision
+      enemies.forEach(e => {
+        e.x += e.vx;
+        if(e.x <= 0 || e.x+e.w >= canvas.width) e.vx *= -1;
+        if(player.x < e.x+e.w && player.x+player.w > e.x &&
+           player.y < e.y+e.h && player.y+player.h > e.y) {
+          gameRunning = false; sounds.die();
+          gameOver(); showMenu(); return;
+        }
+      });
+
+      // Powerups & Coins
+      powerups.forEach(p => {
+        if(!p.collected && player.x < p.x+p.w && player.x+player.w > p.x &&
+           player.y < p.y+p.h && player.y+player.h > p.y) {
+          p.collected = true; sounds.powerup();
+          if(p.type === 'spring') player.vy = -25;
+          if(p.type === 'jetpack') player.jetpack = 60;
+        }
+      });
+      coins.forEach(c => {
+        if(!c.collected && player.x < c.x+c.w && player.x+player.w > c.x &&
+           player.y < c.y+c.h && player.y+player.h > c.y) {
+          c.collected = true; score += 10; sounds.coin();
+        }
+      });
+
+      // Camera scroll
+      if(player.y < canvas.height/2.5) {
+        let diff = canvas.height/2.5 - player.y;
+        player.y = canvas.height/2.5;
+        platforms.forEach(p => p.y += diff);
+        powerups.forEach(p => p.y += diff);
+        coins.forEach(c => c.y += diff);
+        enemies.forEach(e => e.y += diff);
+        stars.forEach(s => { s.y += diff*0.3; if(s.y > canvas.height) s.y = 0; });
+        score += Math.floor(diff/10);
+      }
+
+      // Infinite generation
+      platforms = platforms.filter(p => p.y < canvas.height + 100);
+      powerups = powerups.filter(p => p.y < canvas.height + 100 &&!p.collected);
+      coins = coins.filter(c => c.y < canvas.height + 100 &&!c.collected);
+      enemies = enemies.filter(e => e.y < canvas.height + 100);
+
+      let highestY = canvas.height;
+      if(platforms.length > 0) highestY = Math.min(...platforms.map(p => p.y));
+      while(platforms.length < 15) {
+        let pType = 'normal';
+        let rand = Math.random();
+        if(rand < levelConfig.moving) pType = 'moving';
+        else if(rand < levelConfig.moving + levelConfig.breakable) pType = 'breakable';
+        platforms.push({
+          x: Math.random() * (canvas.width-levelConfig.width-20) + 10,
+          y: highestY - levelConfig.gap - Math.random()*20,
+          w: levelConfig.width, h: 20, type: pType,
+          vx: pType === 'moving'? 2 + currentLevelNum*0.1 : 0, health: pType === 'breakable'? 1 : 999
+        });
+        highestY -= levelConfig.gap;
+        if(Math.random() < levelConfig.enemy) enemies.push({x: platforms[platforms.length-1].x+30, y: highestY-40, w:30,h:30, vx: Math.random()>0.5?1:-1});
+      }
+
+      // Win/Lose
+      let winScore = 500 + (currentLevelNum-1)*200;
+      if(score > winScore) {
+        gameRunning = false;
+        let starCount = score > winScore+300? 3 : score > winScore+100? 2 : 1;
+        if(!gameData.levelStars[currentLevelNum] || gameData.levelStars[currentLevelNum] < starCount) {
+          gameData.totalStars += starCount - (gameData.levelStars[currentLevelNum] || 0);
+          gameData.levelStars[currentLevelNum] = starCount;
+        }
+        if(currentLevelNum === gameData.unlockedLevel && currentLevelNum < 40) gameData.unlockedLevel++;
+        saveGame(); sounds.win();
+        alert(`Level ${currentLevelNum} Complete! ${'⭐'.repeat(starCount)}\nTheme: ${levelConfig.theme}`);
+        showMenu(); return;
+      }
+      if(player.y > canvas.height+50 || (levelConfig.lava && player.y > canvas.height-30)) {
+        gameOver();
+        return;
+      }
+
+      // DRAW - Theme based background
+      let bgColor1 = '#000428', bgColor2 = '#004e92';
+      if(levelConfig.theme === 'Sky') { bgColor1 = '#001e3c'; bgColor2 = '#0a5c8f'; }
+      if(levelConfig.theme === 'Space') { bgColor1 = '#000000'; bgColor2 = '#1a0033'; }
+      if(levelConfig.theme === 'Lava') { bgColor1 = '#330000'; bgColor2 = '#660000'; }
+      if(levelConfig.theme === 'Ice') { bgColor1 = '#001a33'; bgColor2 = '#004466'; }
+      if(levelConfig.theme === 'Void') { bgColor1 = '#000000'; bgColor2 = '#000000'; }
+      if(levelConfig.theme === 'Hell') { bgColor1 = '#1a0000'; bgColor2 = '#330000'; }
+      if(levelConfig.theme === 'Boss') { bgColor1 = '#000000'; bgColor2 = '#330033'; }
+
+      const gradient = ctx.createLinearGradient(0,0,0,canvas.height);
+      gradient.addColorStop(0, bgColor1); gradient.addColorStop(1, bgColor2);
+      ctx.fillStyle = gradient; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Lava
+      if(levelConfig.lava) {
+        ctx.fillStyle = '#ff3300';
+        ctx.shadowColor = '#ff3300'; ctx.shadowBlur = 30;
+        ctx.fillRect(0, canvas.height-30, canvas.width, 30);
+        ctx.shadowBlur = 0;
+      }
+
+      ctx.fillStyle = levelConfig.dark? 'rgba(255,255,255,0.3)' : 'white';
+      stars.forEach(s => { ctx.globalAlpha = Math.random(); ctx.fillRect(s.x, s.y, s.size, s.size); });
+      ctx.globalAlpha = 1;
+
+      platforms.forEach(p => {
+        if(p.type === 'safe') { ctx.fillStyle = '#00ff00'; ctx.shadowColor = '#00ff00'; }
+        else if(p.type === 'moving') { ctx.fillStyle = '#ff00ff'; ctx.shadowColor = '#ff00ff'; }
+        else if(p.type === 'breakable') { ctx.fillStyle = '#ff6600'; ctx.shadowColor = '#ff6600'; }
+        else { ctx.fillStyle = '#00d9ff'; ctx.shadowColor = '#00d9ff'; }
+        ctx.shadowBlur = levelConfig.dark? 5 : 15; ctx.fillRect(p.x, p.y, p.w, p.h); ctx.shadowBlur = 0;
+      });
+
+      // Enemies
+      ctx.fillStyle = '#ff0000'; ctx.shadowColor = '#ff0000'; ctx.shadowBlur = 20;
+      enemies.forEach(e => {
+        ctx.beginPath(); ctx.arc(e.x+e.w/2, e.y+e.h/2, e.w/2, 0, Math.PI*2); ctx.fill();
+      });
+      ctx.shadowBlur = 0;
+
+      powerups.forEach(p => {
+        if(p.collected) return;
+        ctx.fillStyle = p.type === 'spring'? '#ffff00' : '#ff00ff';
+        ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 20;
+        ctx.beginPath(); ctx.arc(p.x+p.w/2, p.y+p.h/2, p.w/2, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0;
+      });
+
+      ctx.fillStyle = 'gold'; ctx.shadowColor = 'gold'; ctx.shadowBlur = 15;
+      coins.forEach(c => {
+        if(!c.collected) {
+          ctx.beginPath(); ctx.arc(c.x+c.w/2, c.y+c.h/2, c.w/2, 0, Math.PI*2); ctx.fill();
+        }
+      });
+      ctx.shadowBlur = 0;
+
+      // Player
+      ctx.save();
+      ctx.shadowColor = '#ff0000'; ctx.shadowBlur = 20;
+      ctx.fillStyle = '#ff0000';
+      ctx.beginPath(); ctx.arc(player.x + player.w/2, player.y + player.w/2, player.w/2, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'white'; ctx.lineWidth = 3; ctx.stroke();
+      ctx.fillStyle = 'white';
+      ctx.beginPath(); ctx.arc(player.x + player.w/2 - 8, player.y + player.w/2 - 5, 4, 0, Math.PI * 2);
+      ctx.arc(player.x + player.w/2 + 8, player.y + player.w/2 - 5, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#0000ff';
+      ctx.fillRect(player.x + player.w/2 - 3, player.y + player.w/2 + 2, 6, 15);
+      if(player.jetpack > 0) {
+        ctx.fillStyle = '#ff6600';
+        ctx.beginPath();
+        ctx.moveTo(player.x+player.w/2-10, player.y+player.h);
+        ctx.lineTo(player.x+player.w/2, player.y+player.h+20);
+        ctx.lineTo(player.x+player.w/2+10, player.y+player.h); ctx.fill();
+      }
+      ctx.shadowBlur = 0; ctx.restore();
+
+      // UI
+      ctx.fillStyle = 'white'; ctx.font = 'bold 30px Arial';
+      ctx.textAlign = 'left'; ctx.fillText('Score: ' + score, 20, 50);
+      ctx.textAlign = 'right'; ctx.fillText(`L${currentLevelNum}: ${levelConfig.theme}`, canvas.width-20, 50);
+      ctx.textAlign = 'center'; ctx.font = '20px Arial';
+      ctx.fillText('⭐ ' + score + '/' + winScore, canvas.width/2, 50);
+
+      animationId = requestAnimationFrame(gameLoop);
+    }
+
+    // SIMPLE TAP TO JUMP
+    function jump() {
+      if(gameRunning) {
+        player.vy = player.jump;
+        sounds.jump();
+      }
+    }
+    canvas.addEventListener('click', jump);
+    canvas.addEventListener('touchstart', function(e) { e.preventDefault(); jump(); });
+
+    showMenu();
+// GAME OVER FUNCTION - Jab player mar jaye
+function gameOver() {
+    gameRunning = false;
+    cancelAnimationFrame(animationId);
+    sounds.die();
+    // Score aur Level dikhao
+    document.getElementById('finalScore').innerText = score;
+    document.getElementById('finalLevel').innerText = currentLevelNum;
+    
+    // Game screen chupao, Game Over dikhao
+    document.getElementById('gameScreen').classList.add('hidden');
+    document.getElementById('gameOverScreen').classList.remove('hidden');
+     window.open('https://www.profitablecpmratenetwork.com/tndn2pxewb?key=498f60f15872999cab2dfad2d122e82f', '_blank');
+}
+
+// REWARD AD FUNCTION - Ad dekhne wala button
+function watchAdForRevive() {
+    // STEP 1: Net check karo
+    if (!navigator.onLine) {
+        alert('⚠️ Internet nahi hai bhai!\n\nRevive ke liye Ad dekhna padega\nWiFi ya Mobile Data on karo');
+        return;
+    }
+    
+    // STEP 2: ADSTERRA AD KHOLO
+    window.open('https://www.profitablecpmratenetwork.com/tndn2pxewb?key=498f60f15872999cab2dfad2d122e82f', '_blank');
+    
+    // STEP 3: 3 SECOND BAAD REVIVE KAR DO
+    // Kyunki Adsterra se pata nahi chalta ad pura dekha ya nahi
+    setTimeout(function() {
+        let userWatched = confirm('Kya aapne ad dekha?\n\nOK dabao to revive ho jaoge');
+        if(userWatched) {
+            revivePlayer(); // Player zinda ho jayega
+        }
+    }, 3000); // 3 second wait karega ad khulne ke baad
+}
+// REVIVE FUNCTION - Ad dekhne ke baad player zinda karo
+function revivePlayer() {
+    // Game Over screen hatao
+    document.getElementById('gameOverScreen').classList.add('hidden');
+    document.getElementById('gameScreen').classList.remove('hidden');
+    
+    // Player ko safe platform pe wapas lao
+    player.y = canvas.height/2;
+    player.vy = -10; // Thoda jump de do
+    player.jetpack = 30; // 1 sec ka jetpack free
+    
+    // Game wapas chalu
+    gameRunning = true;
+    gameLoop();
+    
+    sounds.powerup();
+}
+  </script>
+</body>
+</html>
