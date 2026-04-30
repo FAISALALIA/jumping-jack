@@ -482,5 +482,39 @@ function revivePlayer() {
     sounds.powerup();
 }
   </script>
+  <script>
+// ===== AD CONTROL CODE START =====
+let lastAdTime = 0;
+const AD_COOLDOWN = 120000; // 2 minute = 120000 ms
+
+// Purane ad function ko overwrite kar denge
+const originalShowAd = window.showAdsterraInterstitial || window.showAd || window.adsterra?.show;
+
+function showAdsterraInterstitial() {
+    let currentTime = Date.now();
+    
+    if(currentTime - lastAdTime > AD_COOLDOWN) {
+        console.log("Ad dikha rahe hai");
+        lastAdTime = currentTime;
+        
+        // Tera asli ad ka code yahan call hoga
+        if(typeof originalShowAd === 'function') {
+            originalShowAd();
+        } else if(typeof adsterra !== 'undefined') {
+            adsterra.show();
+        } else {
+            // Agar ad ka function nahi mila to ye run hoga
+            console.log("Ad function nahi mila");
+        }
+    } else {
+        let waitTime = Math.ceil((AD_COOLDOWN - (currentTime - lastAdTime)) / 1000);
+        console.log("Ad cooldown me hai. " + waitTime + " sec baad aayega");
+    }
+}
+
+// Game over hone pe ye function call hota hoga
+// Uska naam dhoondh ke ye line add kar: showAdsterraInterstitial();
+// ===== AD CONTROL CODE END =====
+</script>
 </body>
 </html>
